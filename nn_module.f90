@@ -1,96 +1,109 @@
-!> Neural network inference module for a 3-layer MLP.
-!>
-!> Implements the same architecture as the PyTorch model in
-!> nn_inference_minimal.py:
-!>
-!>   Input (50) -> Linear(50,512) + ReLU
-!>              -> Linear(512,512) + ReLU
-!>              -> Linear(512,3)            (no activation)
-!>
-!> Weight storage convention
-!> -------------------------
-!> PyTorch stores weight matrices as (out_features, in_features) in
-!> row-major order.  For Fortran's column-major layout the export script
-!> (export_weights.py) transposes and writes them in Fortran order, so
-!> each weight array here is declared as w(in_features, out_features).
-!>
-!> The forward pass therefore computes each layer as:
-!>
-!>   output = matmul(input, W) + bias
-!>
-!> which is equivalent to PyTorch's  output = input @ W^T + bias  but
-!> avoids an explicit transpose at runtime.
-!>
-!> Binary file format
-!> ------------------
-!> All .bin files are raw streams of IEEE 754 single-precision (float32)
-!> values with no headers or record markers, read via Fortran stream I/O.
-module nn_module
-  implicit none
+! Steps to read the architecture and weights for a neural network and do inference on test data.
 
-  integer, parameter :: INPUT_DIM  = 50   !< Number of input features
-  integer, parameter :: HIDDEN_DIM = 512  !< Width of both hidden layers
-  integer, parameter :: OUTPUT_DIM = 3    !< Number of output values
+module nn_inference
+    implicit none
+    private
+    public :: read_nn_architecture, read_nn_weights, read_nn_biases, read_nn_activations, perform_nn_inference
 
-  !> Weight matrices stored as (in_features, out_features)
-  real(4) :: w0(INPUT_DIM,  HIDDEN_DIM), b0(HIDDEN_DIM)
-  real(4) :: w1(HIDDEN_DIM, HIDDEN_DIM), b1(HIDDEN_DIM)
-  real(4) :: w2(HIDDEN_DIM, OUTPUT_DIM), b2(OUTPUT_DIM)
+    contains
+        subroutine read_nn_architecture(filename, nlayers, layer_sizes)
+            character(len=*), intent(in) :: filename
+            integer, intent(out) :: nlayers
+            integer, allocatable, intent(out) :: layer_sizes(:)
+            integer :: iunit, i
 
-contains
+            open(newunit=iunit, file=filename, status='old', action='read')
+            read(iunit, *) nlayers
+            allocate(layer_sizes(nlayers))
+            do i = 1, nlayers
+                read(iunit, *) layer_sizes(i)
+            end do
+            close(iunit)
+        end subroutine read_nn_architecture
 
-  !> Load all weight and bias arrays from binary files.
-  !>
-  !> Expects the following files inside `dir`:
-  !>   weight_0.bin, bias_0.bin   (layer 0: 50  -> 512)
-  !>   weight_1.bin, bias_1.bin   (layer 1: 512 -> 512)
-  !>   weight_2.bin, bias_2.bin   (layer 2: 512 -> 3)
-  subroutine load_weights(dir)
-    character(len=*), intent(in) :: dir
+        subroutine read_nn_weights(filename_weights, weights)
+            ! Can read weights
+            character(len=*), intent(in) :: filename_weights
+            real, allocatable, intent(out) :: weights(:,:,:) ! Dimensions: layer index, input neurons, output neurons
+            integer :: iunit
 
-    call read_bin(trim(dir) // '/weight_0.bin', w0, size(w0))
-    call read_bin(trim(dir) // '/bias_0.bin',   b0, size(b0))
-    call read_bin(trim(dir) // '/weight_1.bin', w1, size(w1))
-    call read_bin(trim(dir) // '/bias_1.bin',   b1, size(b1))
-    call read_bin(trim(dir) // '/weight_2.bin', w2, size(w2))
-    call read_bin(trim(dir) // '/bias_2.bin',   b2, size(b2))
-  end subroutine
+            open(newunit=iunit, file=filename_weights, status='old', action='read')
+            read(iunit, *) weights
+            close(iunit)
 
-  !> Read `n` float32 values from a raw binary file into `arr`.
-  subroutine read_bin(fname, arr, n)
-    character(len=*), intent(in) :: fname
-    integer, intent(in) :: n
-    real(4), intent(out) :: arr(n)
-    integer :: u
+        end subroutine read_nn_weights
 
-    open(newunit=u, file=fname, access='stream', form='unformatted', status='old')
-    read(u) arr
-    close(u)
-  end subroutine
+        subroutine read_nn_biases(filename_biases, biases)
+            ! Can read biases
+            character(len=*), intent(in) :: filename_biases
+            real, allocatable, intent(out) :: biases(:,:) ! Dimensions: layer index, number of input neurons
+            integer :: iunit
 
-  !> Run a forward pass through the 3-layer MLP.
-  !>
-  !> Computation for a single input vector:
-  !>   h1 = ReLU( matmul(input, w0) + b0 )    -- hidden layer 0
-  !>   h2 = ReLU( matmul(h1,    w1) + b1 )    -- hidden layer 1
-  !>   output =    matmul(h2,    w2) + b2      -- output layer (linear)
-  !>
-  !> ReLU is applied element-wise: max(x, 0).
-  subroutine forward(input, output)
-    real(4), intent(in)  :: input(INPUT_DIM)
-    real(4), intent(out) :: output(OUTPUT_DIM)
-    real(4) :: h1(HIDDEN_DIM), h2(HIDDEN_DIM)
+            open(newunit=iunit, file=filename_biases, status='old', action='read')
+            read(iunit, *) biases
+            close(iunit)
 
-    ! Layer 0: linear + ReLU
-    h1 = matmul(input, w0) + b0
-    h1 = max(h1, 0.0)
+        end subroutine read_nn_biases
 
-    ! Layer 1: linear + ReLU
-    h2 = matmul(h1, w1) + b1
-    h2 = max(h2, 0.0)
 
-    ! Layer 2: linear (no activation)
-    output = matmul(h2, w2) + b2
-  end subroutine
+        subroutine read_nn_activations(filename, activations)
+            ! Reads activations.
+            character(len=*), intent(in) :: filename
+            character(len=*), allocatable, intent(out) :: activations(:)
+            integer :: iunit
 
-end module nn_module
+            open(newunit=iunit, file=filename, status='old', action='read')
+            read(iunit, *) activations
+            close(iunit)
+
+        end subroutine read_nn_activations
+
+        subroutine perform_nn_inference(filename_inputs, inputs, weights, biases, activations, outputs)
+            ! Does the inference step
+            real, intent(in) :: weights(:,:,:)
+            real, intent(in) :: biases(:,:)
+            character(len=*), intent(in) :: activations(:)
+            integer :: nlayers
+            character(len=*), intent(in) :: filename_inputs
+            real :: inputs(:)
+            real, allocatable, intent(out) :: outputs(:)
+            integer :: iunit, nl, n
+            integer :: ninputs ! Length of input array, for catching errors
+            real, allocatable :: current_weights(:,:), current_biases(:), result(:)
+            character(len=*) :: current_activation
+            
+            nlayers = size(weights, 1)
+
+            ! Read input values
+            ! Check if they have the same length as the second dimension of weights: size(weights(1), 1)
+            open(newunit=iunit, file=filename_inputs, status='old', action='read')
+            read(iunit, *) inputs
+            ninputs = size(inputs)
+            IF (ninputs /= size(weights(1,:,:), 1)) THEN
+                write(*,*) 'Input size not compatible with size of network!'
+            END IF
+
+            ! Iterate through layers (infer from size of weights)
+            ! Matrix multiplication at each layer
+            DO nl = 1, nlayers
+                write(*,*) 'Doing operations for layer', nl
+                current_weights = weights(nl,:,:)
+                current_biases = biases(nl,:)
+                current_activation = activations(nl)
+                allocate(result(size(current_weights(1,:))))
+                result = matmul(inputs, current_weights)
+                result = result + current_biases
+                IF (current_activation == 'relu') THEN
+                    write(*,*) 'Applying relu activation at layer', nl
+                    result = max(result, 0.0)
+                END IF
+                ! Assign value of this layer's result to input for next iteration
+                inputs = result
+            END DO
+            
+            outputs = inputs
+            deallocate(result)
+
+        end subroutine perform_nn_inference
+
+end module nn_inference
