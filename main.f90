@@ -1,87 +1,82 @@
-!> Cross-validation program: Fortran inference vs Python reference.
-!>
-!> This program validates that the Fortran implementation in nn_module.f90
-!> produces the same results as the PyTorch model.  It works as follows:
-!>
-!>   1. Load the neural network weights from weights/*.bin
-!>      (produced by export_weights.py).
-!>
-!>   2. Read the number of test cases from weights/num_tests.txt.
-!>
-!>   3. For each test case i = 0 .. num_tests-1:
-!>      a. Read the input vector  from weights/test_input_<i>.bin   (50 floats)
-!>      b. Read the Python output from weights/test_output_<i>.bin  (3 floats)
-!>      c. Run the Fortran forward pass to get Fortran output       (3 floats)
-!>      d. Compute the maximum absolute error across the 3 outputs
-!>      e. Report PASS if max error < 1e-5, otherwise FAIL
-!>
-!>   4. Print overall PASS/FAIL summary.  Exit code 1 if any test failed.
-!>
-!> The test vectors include both random inputs (with fixed seeds for
-!> reproducibility) and edge cases (all-zeros, all-ones, all-negative),
-!> covering a range of activation patterns in the hidden layers.
-program nn_inference
+! This is the "testing environment" Fortran program for validating the
+! Fortran neural network implementation against reference outputs from a
+! PyTorch model.
+
+! Steps:
+! 1. Load the neural network weights and biases from the binary files in ./weights
+! 2. Load test inputs and reference outputs from ./test_io
+! 3. For each test case, run the Fortran forward pass and compare outputs
+! 4. Report PASS/FAIL for each test case and overall summary: PASS if difference between Fortran and Python outputs is < 1e-5, else FAIL
+
+PROGRAM nn_inference
   use nn_module
   implicit none
 
-  integer :: num_tests, i, u
-  real(4) :: input(INPUT_DIM), output(OUTPUT_DIM), ref_output(OUTPUT_DIM)
-  real(4) :: max_err
-  character(len=256) :: fname
-  logical :: all_pass
+  integer :: i, u, nlayers_max=10
+  real, allocatable :: weights(:,:,:), biases(:,:), input(:), output(:), ref_output(:)
+  real :: max_err
+  integer :: max_num_neurons = 1024
+  integer :: num_tests
+  character(len=100) :: fname, wname, bname, aname
+  character(len=16), allocatable :: activations(:) ! Activations do not have long names
 
-  ! Load weights from binary files produced by export_weights.py
-  call load_weights('weights')
+  ! Step 1: Load weights, biases and activations from ./weights
+    allocate(weights(nlayers_max,max_num_neurons,max_num_neurons))
+    allocate(biases(nlayers_max,max_num_neurons))
+    allocate(activations(nlayers_max))
 
-  ! Read number of test cases
-  open(newunit=u, file='weights/num_tests.txt', status='old')
-  read(u, *) num_tests
-  close(u)
+    weights = 0.0
+    biases = 0.0
+    activations = 'id' ! Default activation is identity (for safety)
 
-  all_pass = .true.
-
-  write(*,'(A,I0,A)') 'Running ', num_tests, ' test cases:'
-  write(*,'(A)') repeat('-', 70)
-
-  do i = 0, num_tests - 1
-    ! Read test input (50 float32 values)
-    write(fname, '(A,I0,A)') 'weights/test_input_', i, '.bin'
-    open(newunit=u, file=trim(fname), access='stream', form='unformatted', status='old')
-    read(u) input
+  ! Do something until an error occurs, then break/continue
+    DO i = 1, nlayers_max  ! Hard-coded
+        ! Load weights and biases for layer i
+        
+        write(wname, '(A,I0,A)') 'weights/layer_', i-1, '_weights.bin'
+        call read_nn_weights(wname, weights(i,:,:))
+        write(bname, '(A,I0,A)') 'weights/layer_', i-1, '_biases.bin'
+        call read_nn_biases(bname, biases(i,:))
+        write(aname, '(A,I0,A)') 'weights/layer_', i-1, '_act.txt'
+        call read_nn_activation(aname, activations(i))
+        ! If error occurs (e.g., file not found), exit loop
+        EXIT
+    END DO
+    
+    ! Step 2: Load test inputs and reference outputs from ./test_io
+    ! How many test cases?
+    open(unit=u, file='test_io/num_tests.txt', status='old')
+    read(u, *) num_tests
     close(u)
 
-    ! Read Python reference output (3 float32 values)
-    write(fname, '(A,I0,A)') 'weights/test_output_', i, '.bin'
-    open(newunit=u, file=trim(fname), access='stream', form='unformatted', status='old')
-    read(u) ref_output
-    close(u)
+    DO i = 0, num_tests - 1
+        write(*, '(A,I0,A)') 'Running test case ', i, '...'
+        ! Read test input
+        write(fname, '(A,I0,A)') 'test_io/input_', i, '.bin'
+        open(newunit=u, file=trim(fname), access='stream', form='unformatted', status='old')
+        read(u) input
+        close(u)
 
-    ! Run Fortran forward pass
-    call forward(input, output)
+        ! Read reference output
+        write(fname, '(A,I0,A)') 'test_io/output_', i, '.bin'
+        open(newunit=u, file=trim(fname), access='stream', form='unformatted', status='old')
+        read(u) ref_output
+        close(u)
 
-    ! Element-wise comparison
-    max_err = maxval(abs(output - ref_output))
+        ! Run Fortran forward pass
+        call perform_nn_inference(input, weights, biases, activations, output)
 
-    write(*,'(A,I0)') 'Test case ', i
-    write(*,'(A,3F14.8)') '  Python ref: ', ref_output
-    write(*,'(A,3F14.8)') '  Fortran:    ', output
-    write(*,'(A,ES12.5)') '  Max error:  ', max_err
+        ! Compare outputs and report PASS/FAIL
+        max_err = maxval(abs(output - ref_output))
+        if (max_err < 1e-5) then
+            write(*, '(A,I0,A,F10.6)') 'Test case ', i, ': PASS (max error = ', max_err, ')'
+        else
+            write(*, '(A,I0,A,F10.6)') 'Test case ', i, ': FAIL (max error = ', max_err, ')'
+        end if
+    END DO
 
-    if (max_err < 1.0e-5) then
-      write(*,'(A)') '  Result:     PASS'
-    else
-      write(*,'(A)') '  Result:     FAIL'
-      all_pass = .false.
-    end if
-    write(*,'(A)') ''
-  end do
+    deallocate(weights)
+    deallocate(biases)
+    deallocate(activations)
 
-  write(*,'(A)') repeat('=', 70)
-  if (all_pass) then
-    write(*,'(A)') 'ALL TESTS PASSED'
-  else
-    write(*,'(A)') 'SOME TESTS FAILED'
-    stop 1
-  end if
-
-end program nn_inference
+END PROGRAM nn_inference

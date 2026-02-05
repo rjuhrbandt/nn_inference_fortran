@@ -1,11 +1,12 @@
 ! Steps to read the architecture and weights for a neural network and do inference on test data.
 
-module nn_inference
+module nn_module
     implicit none
     private
-    public :: read_nn_architecture, read_nn_weights, read_nn_biases, read_nn_activations, perform_nn_inference
+    public :: read_nn_architecture, read_nn_weights, read_nn_biases, read_nn_activation, perform_nn_inference
 
     contains
+
         subroutine read_nn_architecture(filename, nlayers, layer_sizes)
             character(len=*), intent(in) :: filename
             integer, intent(out) :: nlayers
@@ -24,7 +25,7 @@ module nn_inference
         subroutine read_nn_weights(filename_weights, weights)
             ! Can read weights
             character(len=*), intent(in) :: filename_weights
-            real, allocatable, intent(out) :: weights(:,:,:) ! Dimensions: layer index, input neurons, output neurons
+            real, intent(out) :: weights(:,:) ! Dimensions: layer index, input neurons, output neurons
             integer :: iunit
 
             open(newunit=iunit, file=filename_weights, status='old', action='read')
@@ -36,7 +37,7 @@ module nn_inference
         subroutine read_nn_biases(filename_biases, biases)
             ! Can read biases
             character(len=*), intent(in) :: filename_biases
-            real, allocatable, intent(out) :: biases(:,:) ! Dimensions: layer index, number of input neurons
+            real, intent(out) :: biases(:) ! Dimensions: layer index, number of input neurons
             integer :: iunit
 
             open(newunit=iunit, file=filename_biases, status='old', action='read')
@@ -45,43 +46,42 @@ module nn_inference
 
         end subroutine read_nn_biases
 
-
-        subroutine read_nn_activations(filename, activations)
-            ! Reads activations.
+        subroutine read_nn_activation(filename, activation)
+            ! Reads activations. Routine is called layerwise, so this is only for one layer. (single string)
             character(len=*), intent(in) :: filename
-            character(len=*), allocatable, intent(out) :: activations(:)
+            character(len=*), intent(out) :: activation
             integer :: iunit
 
             open(newunit=iunit, file=filename, status='old', action='read')
-            read(iunit, *) activations
+            read(iunit, *) activation
             close(iunit)
 
-        end subroutine read_nn_activations
+        end subroutine read_nn_activation
 
-        subroutine perform_nn_inference(filename_inputs, inputs, weights, biases, activations, outputs)
+        subroutine perform_nn_inference(inputs, weights, biases, activations, outputs)
             ! Does the inference step
             real, intent(in) :: weights(:,:,:)
             real, intent(in) :: biases(:,:)
-            character(len=*), intent(in) :: activations(:)
+            character(len=16), intent(in) :: activations(:)
             integer :: nlayers
-            character(len=*), intent(in) :: filename_inputs
             real :: inputs(:)
             real, allocatable, intent(out) :: outputs(:)
-            integer :: iunit, nl, n
+            integer :: nl
             integer :: ninputs ! Length of input array, for catching errors
             real, allocatable :: current_weights(:,:), current_biases(:), result(:)
-            character(len=*) :: current_activation
+            character(len=16) :: current_activation
             
             nlayers = size(weights, 1)
 
             ! Read input values
             ! Check if they have the same length as the second dimension of weights: size(weights(1), 1)
-            open(newunit=iunit, file=filename_inputs, status='old', action='read')
-            read(iunit, *) inputs
             ninputs = size(inputs)
             IF (ninputs /= size(weights(1,:,:), 1)) THEN
                 write(*,*) 'Input size not compatible with size of network!'
             END IF
+
+            allocate(current_weights(size(weights, 2), size(weights, 3)))
+            allocate(current_biases(size(biases, 2)))
 
             ! Iterate through layers (infer from size of weights)
             ! Matrix multiplication at each layer
@@ -96,6 +96,11 @@ module nn_inference
                 IF (current_activation == 'relu') THEN
                     write(*,*) 'Applying relu activation at layer', nl
                     result = max(result, 0.0)
+                ELSEIF (current_activation == 'id') THEN
+                    write(*,*) 'No activation (identity) at layer', nl
+                    ! Do nothing
+                ELSE
+                    write(*,*) 'Unknown activation function:', current_activation
                 END IF
                 ! Assign value of this layer's result to input for next iteration
                 inputs = result
@@ -103,7 +108,9 @@ module nn_inference
             
             outputs = inputs
             deallocate(result)
+            deallocate(current_weights)
+            deallocate(current_biases)
 
         end subroutine perform_nn_inference
 
-end module nn_inference
+end module nn_module
