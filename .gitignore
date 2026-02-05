@@ -1,9 +1,11 @@
 # Jupyter notebooks, they're just for small tests
 .ipynb_checkpoints
 *.ipynb
+
 *.o
 *.mod
 *.bin
 *.txt
+nn_module
 
 __pycache__/
