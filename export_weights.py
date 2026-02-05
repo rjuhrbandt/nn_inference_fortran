@@ -46,9 +46,9 @@ network.eval()
 # ---------------------------------------------------------------------------
 
 # Iterate through number of layers to export weights and biases
-for i in range(nlayers):
-    w_key = f'layers.linear_{i}.weight'
-    b_key = f'layers.linear_{i}.bias'
+for i in range(nlayers + 1):
+    w_key = f'layers.linear_{i}.weight' if i < nlayers else 'layers.linear_output.weight'
+    b_key = f'layers.linear_{i}.bias' if i < nlayers else 'layers.linear_output.bias'
 
     w_pt = sd[w_key].numpy().astype(np.float32)
     b_pt = sd[b_key].numpy().astype(np.float32)
