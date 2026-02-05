@@ -1,7 +1,7 @@
 FC = gfortran
 FFLAGS = -O2
 
-TARGET = nn_inference
+TARGET = nn_module
 OBJS = nn_module.o main.o
 
 all: $(TARGET)
