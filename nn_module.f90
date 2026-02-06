@@ -3,11 +3,116 @@
 MODULE nn_module
     IMPLICIT NONE
     PRIVATE
-    PUBLIC :: normalize_input, read_nn_architecture, read_nn_weights, read_nn_biases, read_nn_activation, forward_pass_single, forward_pass_full
+    PUBLIC :: normalize_input, read_nn_architecture, read_nn_weights, read_nn_biases, read_nn_activation 
+    PUBLIC :: forward_pass_single, forward_pass_full
 
     CONTAINS
 
-        SUBROUTINE normalize_input(var_name, input, normalized_input)
+        SUBROUTINE assign_input_values(input_var_names, num_input_var_names, z, n, ordered_nb_list, input_data, n_input_data)
+            ! This is a placeholder for the logic to extract the input data from the FESOM data structure based on the variable name. 
+            ! This will likely involve a series of IF statements or a SELECT CASE statement to match the variable names to the corresponding data extraction logic.
+            CHARACTER(LEN=*), INTENT(IN) :: input_var_names(:)
+            REAL, INTENT(OUT) :: input_data(:), n_input_data(:) 
+            INTEGER, INTENT(IN) :: z, n ! These are the vertical level and node index for which we want to extract the data. They are needed to know which value to extract from the FESOM data structure.
+            INTEGER :: i ! Current index in loop over input variables. var_name and var_name_nb... are successive in the input_var_names.txt, so we can just keep incrementing j to fill the input_data array in the correct order.
+            INTEGER :: nb, u
+            INTEGER :: max_num_nb = 6 ! Maximum number of neighbours in dbgyre mesh.
+            INTEGER :: num_input_var_names
+            INTEGER, INTENT(IN) :: ordered_nb_list(:) ! This is the list of neighbour node indices, ordered ascending.
+            CHARACTER(LEN=32) :: name, fname
+            REAL, ALLOCATABLE :: means(:), stds(:) ! Arrays to hold the means and stds for all input variables, to be read from ./normalization_params. This is needed for normalization of the input data.
+
+            ALLOCATE(means(num_input_var_names), stds(num_input_var_names))
+
+            OPEN(NEWUNIT=u, FILE=TRIM(fname), STATUS='old', ACTION='read', FORM='unformatted', ACCESS='stream')
+            DO i = 1, num_input_var_names
+                 ! Loop over input variable names. For each variable name, extract the corresponding data from the FESOM data structure and fill the input_data array. 
+                 ! Also apply normalization to the input data using the mean and std from the training data, which are stored in ./normalization_params.
+                name = input_var_names(i)
+                WRITE(fname, '(A,A,A)') './normalization_params/mean/', input_var_names(i), '.bin'
+                READ(u) means(i)
+                WRITE(fname, '(A,A,A)') './normalization_params/std/', input_var_names(i), '.bin'
+                READ(u) stds(i)
+                SELECT CASE (name)
+                    CASE ('temp')
+                        ! input_data(i) = tracers%data(1)%values(z,n)
+                        DO nb=1, max_num_nb
+                            IF ( ordered_nb_list(nb) == -1 ) THEN
+                                input_data(i+nb) = means(i) ! or, equivalently, the mean value from the training data after normalization
+                            ELSE
+                                !  input_data(i+nb) = tracers%data(1)%values(z, ordered_nb_list(nb))
+                            END IF
+                        END DO
+                    CASE ('unod')
+                        ! input_data(i) = dynamics%uvnode(1,z,n)
+                        DO nb=1, max_num_nb
+                            IF ( ordered_nb_list(nb) == -1 ) THEN
+                                input_data(i+nb) = means(i) ! or, equivalently, the mean value from the training data after normalization
+                            ELSE
+                                !  input_data(i+nb) = dynamics%uvnode(1,z, ordered_nb_list(nb))
+                            END IF
+                        END DO
+                    CASE ('vnod')
+                        ! input_data(i) = dynamics%uvnode(2,z,n)
+                        DO nb=1, max_num_nb
+                            IF ( ordered_nb_list(nb) == -1 ) THEN
+                                input_data(i+nb) = means(i) ! or, equivalently, the mean value from the training data after normalization
+                            ELSE
+                                !  input_data(i+nb) = dynamics%uvnode(2,z, ordered_nb_list(nb))
+                            END IF
+                        END DO
+                    CASE ('curl_u')
+                        ! Call customized subroutine to compute curl_u as it is not computed by default
+                        ! curl_u = ...
+                        DO nb=1, max_num_nb
+                            IF ( ordered_nb_list(nb) == -1 ) THEN
+                                input_data(i+nb) = means(i) ! or, equivalently, the mean value from the training data after normalization
+                            ELSE
+                                !  input_data(i+nb) = curl_u(z, ordered_nb_list(nb))
+                            END IF
+                        END DO
+                    CASE ('slope_x')
+                        ! input_data(i) = neutral_slope(1,z,n)
+                        DO nb=1, max_num_nb
+                            IF ( ordered_nb_list(nb) == -1 ) THEN
+                                input_data(i+nb) = means(i) ! or, equivalently, the mean value from the training data after normalization
+                            ELSE
+                                !  input_data(i+nb) = neutral_slope(1,z, ordered_nb_list(nb))
+                            END IF
+                        END DO
+                    CASE ('slope_y')
+                        ! input_data(i) = neutral_slope(2,z,n)
+                        DO nb=1, max_num_nb
+                            IF ( ordered_nb_list(nb) == -1 ) THEN
+                                input_data(i+nb) = means(i) ! or, equivalently, the mean value from the training data after normalization
+                            ELSE
+                                !  input_data(i+nb) = neutral_slope(2,z, ordered_nb_list(nb))
+                            END IF
+                        END DO
+                    CASE ('N2')
+                        ! Watch out: N2 is defined at vertical interfaces, so it needs to be interpolated to the vertical levels of the nodes.
+                        ! input_data(i) = bvfreq(z,n)
+                        DO nb=1, max_num_nb
+                            IF ( ordered_nb_list(nb) == -1 ) THEN
+                                input_data(i+nb) = means(i) ! or, equivalently, the mean value from the training data after normalization
+                            ELSE
+                                !  input_data(i+nb) = bvfreq(z, ordered_nb_list(nb))
+                            END IF
+                        END DO
+                    CASE ('ld_baroc1')
+                        ! input_data(i) = rosb(n)
+                    CASE DEFAULT
+                        ! WRITE(*,(A,A,A)) 'This variable (' // var_name // ') probably ends with _nb and its value is already filled. Skipping...'
+                END SELECT
+
+            END DO
+            CLOSE(u)
+            ! Now normalize by doing array computation
+            n_input_data = (input_data - means) / stds
+            DEALLOCATE(means, stds)
+        END SUBROUTINE assign_input_values
+
+        SUBROUTINE normalize_input(var_name,input, normalized_input)
             ! Normalizes the input using the mean and std from ./normalization_params. This is a common preprocessing step for neural network inputs.
             ! Needs to be called for every input before passing to the network!
             CHARACTER(LEN=*), INTENT(IN) :: var_name
