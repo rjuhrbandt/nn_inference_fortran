@@ -75,13 +75,13 @@ module nn_module
             allocate(results(size(weights(2,:))))
             results = matmul(inputs, weights) + biases
             IF (activation == 'relu') THEN
-                write(*,*) 'Applying relu activation'
+                ! write(*,*) 'Applying relu activation'
                 results = max(results, 0.0)
             ELSEIF (activation == 'id') THEN
-                write(*,*) 'No activation (identity)'
+                ! write(*,*) 'No activation (identity)'
                 ! Do nothing
             ELSE
-                write(*,*) 'Unknown activation function:', activation
+                ! write(*,*) 'Unknown activation function:', activation
             END IF
 
         end subroutine forward_pass_single
@@ -101,29 +101,28 @@ module nn_module
             current_input = input
             
             DO n=0, nlayers-1
-                write(*,*) 'Processing layer ', n
+                ! write(*,*) 'Processing layer ', n
                 ! Remove allocation from possible previous iteration
                 if (allocated(current_weights)) deallocate(current_weights)
                 if (allocated(current_biases)) deallocate(current_biases)
 
                 ! Read weights, biases, activations for layer n
-                write(*,*) 'Reading weights...'
+                ! write(*,*) 'Reading weights...'
                 write(wname, '(A,I0,A)') 'weights/layer_', n, '_weights.bin'
                 allocate(current_weights(layer_sizes(n+1), layer_sizes(n+2)))
-                write(*,*) 'shape of current_weights: ', shape(current_weights)
                 call read_nn_weights(wname, current_weights)
-                write(*,*) 'shape of current_weights after reading: ', shape(current_weights)
+                ! write(*,*) 'shape of current_weights after reading: ', shape(current_weights)
                 
-                write(*,*) 'Reading biases...'
+                ! write(*,*) 'Reading biases...'
                 write(bname, '(A,I0,A)') 'weights/layer_', n, '_biases.bin'
                 allocate(current_biases(layer_sizes(n+2)))
                 call read_nn_biases(bname, current_biases)
                 
-                write(*,*) 'Reading activation...'
+                ! write(*,*) 'Reading activation...'
                 write(aname, '(A,I0,A)') 'weights/layer_', n, '_act.txt'
                 call read_nn_activation(aname, current_activation)
 
-                write(*,*) 'Layer ', n, ': weights shape = ', shape(current_weights), ', biases shape = ', shape(current_biases)
+                ! write(*,*) 'Layer ', n, ': weights shape = ', shape(current_weights), ', biases shape = ', shape(current_biases)
 
                 call forward_pass_single(current_input, current_weights, current_biases, current_activation, current_output)
 
