@@ -9,3 +9,5 @@
 nn_module
 
 __pycache__/
+
+./normalization_params
