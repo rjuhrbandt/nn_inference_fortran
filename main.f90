@@ -20,11 +20,9 @@ PROGRAM nn_inference
   CHARACTER(LEN=32) :: nlname='weights/nlayers.bin', nnname='weights/nneurons.bin'
   INTEGER, ALLOCATABLE :: layer_sizes(:)
 
-  ! Step 1: READ architecture to determine sizes
-  ! WRITE(*,*) 'READing neural network architecture...'
+  ! Step 1: Read architecture to determine sizes. 
+  ! Only do once for the whole FESOM run.
   CALL read_nn_architecture(nlname, nnname, nlayers, layer_sizes)
-  ! WRITE(*,*) 'Found nlayers: ', nlayers
-  ! WRITE(*,*) 'Found layer sizes: ', layer_sizes
 
   ! Iterate through num_tests test cases
   WRITE(fname, '(A)') 'test_io/num_tests.bin'
@@ -33,6 +31,15 @@ PROGRAM nn_inference
   CLOSE(u)
   ! WRITE(*,*) 'Number of test cases: ', num_tests
 
+  ! Read input var names (just for testing whether we can read the file correctly)
+  ! Only do once for the whole FESOM run.
+  WRITE(fname, '(A)') 'input_var_names.txt'
+  OPEN(NEWUNIT=u, FILE=trim(fname), STATUS='old', ACCESS='sequential', FORM='formatted', ACTION='read')
+  DO i = 1, layer_sizes(1)
+    READ(u, '(A)') fname
+  END DO
+  CLOSE(u)
+
   ! ALLOCATE array for inputs and outputs
   ALLOCATE(input(layer_sizes(1)))
   ALLOCATE(ref_output(layer_sizes(nlayers+1)))
@@ -40,13 +47,13 @@ PROGRAM nn_inference
   DO i=0, num_tests-1
     WRITE(*,*) 'Running test case ', i
 
-    ! Step 2: READ inputs and outputs
-    ! WRITE(*,*) 'READing input array...'
+    ! Step 2: Read inputs and outputs
+    ! WRITE(*,*) 'Reading input array...'
     WRITE(fname, '(A,I0,A)') 'test_io/input_', i, '.bin'
     OPEN(NEWUNIT=u, FILE=trim(fname), ACCESS='stream', FORM='unformatted', STATUS='old', ACTION='read')
     READ(u) input
     CLOSE(u)
-    ! WRITE(*,*) 'READing output array...'
+    ! WRITE(*,*) 'Reading output array...'
     WRITE(fname, '(A,I0,A)') 'test_io/output_', i, '.bin'
     OPEN(NEWUNIT=u, FILE=trim(fname), ACCESS='stream', FORM='unformatted', STATUS='old', ACTION='read')
     READ(u) ref_output
