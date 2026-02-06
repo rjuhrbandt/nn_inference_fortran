@@ -3,9 +3,35 @@
 MODULE nn_module
     IMPLICIT NONE
     PRIVATE
-    PUBLIC :: read_nn_architecture, read_nn_weights, read_nn_biases, read_nn_activation, forward_pass_single, forward_pass_full
+    PUBLIC :: normalize_input, read_nn_architecture, read_nn_weights, read_nn_biases, read_nn_activation, forward_pass_single, forward_pass_full
 
     CONTAINS
+
+        SUBROUTINE normalize_input(var_name, input, normalized_input)
+            ! Normalizes the input using the mean and std from ./normalization_params. This is a common preprocessing step for neural network inputs.
+            ! Needs to be called for every input before passing to the network!
+            CHARACTER(LEN=*), INTENT(IN) :: var_name
+            REAL, INTENT(IN) :: input
+            REAL :: mean
+            REAL :: std
+            REAL, INTENT(OUT) :: normalized_input
+
+            CHARACTER(LEN=32) :: mean_fname, std_fname
+            INTEGER :: iunit
+
+            WRITE(mean_fname, '(A,A,A)') './normalization_params/mean/', var_name, '.bin'
+            OPEN(NEWUNIT=iunit, FILE=TRIM(mean_fname), STATUS='old', ACTION='read', FORM='unformatted', ACCESS='stream')
+            READ(iunit) mean
+            CLOSE(iunit)
+
+            WRITE(std_fname, '(A,A,A)') './normalization_params/std/', var_name, '.bin'
+            OPEN(NEWUNIT=iunit, FILE=TRIM(std_fname), STATUS='old', ACTION='read', FORM='unformatted', ACCESS='stream')
+            READ(iunit) std
+            CLOSE(iunit)
+
+            normalized_input = (input - mean) / std
+
+        END SUBROUTINE normalize_input
 
         SUBROUTINE read_nn_architecture(nlname, nnname, nl, layer_sizes)
             CHARACTER(LEN=32) :: nlname, nnname
@@ -13,14 +39,14 @@ MODULE nn_module
             INTEGER, ALLOCATABLE, INTENT(OUT) :: layer_sizes(:)
             INTEGER :: iunit
 
-            WRITE(nlname, '(A)') 'weights/nlayers.bin'
+            WRITE(nlname, '(A)') './weights/nlayers.bin'
             OPEN(NEWUNIT=iunit, FILE=TRIM(nlname), STATUS='old', ACTION='read', FORM='unformatted', ACCESS='stream')
             READ(iunit) nl
             CLOSE(iunit)
 
             ALLOCATE(layer_sizes(nl+1)) ! one layer is (nnneurons0, nneurons1), so we need nlayers+1 entries
 
-            WRITE(nnname, '(A)') 'weights/nneurons.bin'
+            WRITE(nnname, '(A)') './weights/nneurons.bin'
             OPEN(NEWUNIT=iunit, FILE=TRIM(nnname), STATUS='old', ACTION='read', FORM='unformatted', ACCESS='stream')
             READ(iunit) layer_sizes
             CLOSE(iunit)
@@ -32,7 +58,7 @@ MODULE nn_module
             REAL, INTENT(OUT) :: weights(:,:) ! Dimensions: input neurons, output neurons
             INTEGER :: iunit
 
-            OPEN(NEWUNIT=iunit, FILE=filename_weights, STATUS='old', ACCESS='stream', FORM='unformatted')
+            OPEN(NEWUNIT=iunit, FILE=filename_weights, STATUS='old', ACTION='read', ACCESS='stream', FORM='unformatted')
             READ(iunit) weights
             CLOSE(iunit)
 
