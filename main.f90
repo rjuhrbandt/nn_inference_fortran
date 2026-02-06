@@ -22,13 +22,13 @@ PROGRAM nn_inference
 
   ! Step 1: READ architecture to determine sizes
   ! WRITE(*,*) 'READing neural network architecture...'
-  CALL READ_nn_architecture(nlname, nnname, nlayers, layer_sizes)
+  CALL read_nn_architecture(nlname, nnname, nlayers, layer_sizes)
   ! WRITE(*,*) 'Found nlayers: ', nlayers
   ! WRITE(*,*) 'Found layer sizes: ', layer_sizes
 
   ! Iterate through num_tests test cases
   WRITE(fname, '(A)') 'test_io/num_tests.bin'
-  OPEN(newunit=u, file=trim(fname), status='old', access='stream', form='unformatted', action='READ')
+  OPEN(NEWUNIT=u, FILE=trim(fname), STATUS='old', ACCESS='stream', FORM='unformatted', ACTION='read')
   READ(u) num_tests
   CLOSE(u)
   ! WRITE(*,*) 'Number of test cases: ', num_tests
@@ -43,12 +43,12 @@ PROGRAM nn_inference
     ! Step 2: READ inputs and outputs
     ! WRITE(*,*) 'READing input array...'
     WRITE(fname, '(A,I0,A)') 'test_io/input_', i, '.bin'
-    OPEN(newunit=u, file=trim(fname), access='stream', form='unformatted', status='old')
+    OPEN(NEWUNIT=u, FILE=trim(fname), ACCESS='stream', FORM='unformatted', STATUS='old', ACTION='read')
     READ(u) input
     CLOSE(u)
     ! WRITE(*,*) 'READing output array...'
     WRITE(fname, '(A,I0,A)') 'test_io/output_', i, '.bin'
-    OPEN(newunit=u, file=trim(fname), access='stream', form='unformatted', status='old')
+    OPEN(NEWUNIT=u, FILE=trim(fname), ACCESS='stream', FORM='unformatted', STATUS='old', ACTION='read')
     READ(u) ref_output
     CLOSE(u)
 
